@@ -1,8 +1,11 @@
 # AdvProg Tutorial 6
+## Agus Tini Sridewi / 2306276004 / ADPRO A
 
-## Commit 1 Reflection Notes
+<details>
+    <summary><strong> Commit 1 Reflection Notes </summary></strong>
 
 Kode yang saya jalankan:
+
 ```rust 
 use std::{
     io::{prelude::*, BufReader},
@@ -56,3 +59,45 @@ Permintaan HTTP yang diterima:
     "Cookie: csrftoken=AVQpXuTt2pLAt1RJOovVJ5VrDHot53bD",
 ]
  ```
+</details>
+
+<details>
+    <summary><strong> Commit 2 Reflection Notes </summary></strong>
+
+```rust
+use std::{
+    fs,
+    io::{prelude::*, BufReader},
+    net::{TcpListener, TcpStream},
+};
+
+...
+
+fn handle_connection(mut stream: TcpStream) {
+    let buf_reader = BufReader::new(&stream);
+    let http_request: Vec<_> = buf_reader
+        .lines()
+        .map(|result| result.unwrap())
+        .take_while(|line| !line.is_empty())
+        .collect();
+
+    let status_line = "HTTP/1.1 200 OK";
+    let contents = fs::read_to_string("hello.html").unwrap();
+    let length = contents.len();
+
+    let response =
+        format!("{status_line}\r\nContent-Length: {length}\r\n\r\n{contents}");
+
+    stream.write_all(response.as_bytes()).unwrap();
+}
+
+```
+Screen Capture ⤵️
+![Commit 2 screen capture](/assets/images/commit2.png)
+
+Fungsi `handle_connection` pada milestone ini telah ditingkatkan agar tidak hanya membaca permintaan HTTP dari browser, tetapi juga memberikan respon HTML yang bisa ditampilkan di browser. Kita menambahkan `fs` ke dalam daftar use agar dapat mengakses modul sistem file dari Rust. Kemudian, file `hello.html` dibaca menggunakan `fs::read_to_string`, dan isi dari file tersebut disisipkan ke dalam respons HTTP melalui `format!`. 
+
+Agar sesuai dengan standar HTTP, kita juga menambahkan header Content-Length, yang berisi panjang isi HTML (length) sebagai informasi bagi browser tentang ukuran konten yang akan diterima.
+
+Bagian `{status_line}\r\nContent-Length: {length}\r\n\r\n{contents}` adalah inti dari format respons HTTP yang dikirim ke browser. `status_line` berisi "HTTP/1.1 200 OK", menandakan bahwa permintaan telah berhasil diproses. Lalu, `Content-Length: {length}` memberi tahu browser seberapa panjang isi yang akan diterima dalam byte. Dua baris kosong \r\n\r\n adalah pemisah yang wajib dalam format HTTP, yang menandakan bahwa header telah selesai dan bagian selanjutnya adalah isi dari respons.Setelah semua elemen respons disusun, data ini dikirimkan ke browser menggunakan `stream.write_all`.
+</details>
