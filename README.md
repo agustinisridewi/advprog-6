@@ -135,3 +135,34 @@ Screen Capture ⤵️
 ![Commit 3 screen capture](/assets/images/commit3.png)
 
 </details>
+
+<details>
+    <summary><strong> Commit 4 Reflection Notes </summary></strong>
+
+```rust
+use std::{
+    fs,
+    io::{prelude::*, BufReader},
+    net::{TcpListener, TcpStream},
+    thread,
+    time::Duration,
+};
+// --snip--
+
+fn handle_connection(mut stream: TcpStream) {
+    // --snip--
+
+    let (status_line, filename) = match &request_line[..] {
+        "GET / HTTP/1.1" => ("HTTP/1.1 200 OK", "hello.html"),
+        "GET /sleep HTTP/1.1" => {
+            thread::sleep(Duration::from_secs(10));
+            ("HTTP/1.1 200 OK", "hello.html")
+        }
+        _ => ("HTTP/1.1 404 NOT FOUND", "404.html"),
+    };
+
+    // --snip--
+}
+```
+Perubahan pada kode dengan menambahkan simulasi delay menggunakan `thread::sleep(Duration::from_secs(10))` pada request `/sleep` ini menunjukkan kelemahan server single-threaded, di mana satu permintaan lambat dapat memblokir semua permintaan lain karena hanya ada satu thread yang memproses semua koneksi. 
+</details>
