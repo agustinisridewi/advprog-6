@@ -258,6 +258,74 @@ Desain ini secara teknis jauh lebih efisien dibanding membuat thread baru setiap
 
 <details>
     <summary><strong> Bonus </summary></strong>
-    
+
+Untuk meningkatkan keamanan dan keandalan sistem, cara pembuatan ThreadPool telah diubah dari `ThreadPool::new(4)` menjadi `ThreadPool::build(4)`. Metode build ini lebih aman karena mengembalikan      yang memungkinkan penanganan error saat inisialisasi. Jika jumlah thread tidak valid (misalnya 0 atau negatif), error akan dikembalikan tanpa menyebabkan panic. Untuk mendukung proses debugging, struct `PoolCreationError` juga dilengkapi implementasi Display dan Debug agar pesan kesalahan lebih informatif dan mudah dilacak.
+
+Perubahan pada main.rs:
+```rust
+...
+fn main() {
+    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+    let pool = ThreadPool::build(4).unwrap();
+    ...
+}
+...
+```
+
+Perubahan pada lib.rs:
+```rust
+
+use std::{
+    fmt,
+    ...
+};
+...
+
+pub struct PoolCreationError {
+      reason: String,
+ }
+  
+ impl fmt::Display for PoolCreationError {
+      fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+          write!(
+              f,
+              "Unable to create ThreadPool: {}", self.reason
+          )
+      }
+ }
+  
+ impl fmt::Debug for PoolCreationError {
+      fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+          write!(f, "{{ file: {}, line: {} }}", file!(), line!())
+      }
+ }
+  
+ impl ThreadPool {
+      pub fn build(size: usize) -> Result<ThreadPool, PoolCreationError> {
+          if size <= 0 {
+              Err(PoolCreationError {
+                  reason: "Thread count must be a positive nonzero integer".to_string()
+              })
+          } else {
+              let (sender, receiver) = mpsc::channel();
+              let receiver = Arc::new(Mutex::new(receiver));
+  
+              let mut workers = Vec::with_capacity(size);
+  
+              for id in 0..size {
+                  workers.push(Worker::new(id, Arc::clone(&receiver)));
+              }
+  
+              Ok(ThreadPool { workers, sender })
+          }
+      }
+      
+      ...
+ }
+ ...
+ ```
+
+Dengan pendekatan ini, proses inisialisasi thread pool menjadi lebih robust karena kesalahan konfigurasi dapat dideteksi lebih awal sebelum server berjalan. Hal ini membuat sistem lebih stabil dan aman
+
 </details>
 
