@@ -101,3 +101,37 @@ Agar sesuai dengan standar HTTP, kita juga menambahkan header Content-Length, ya
 
 Bagian `{status_line}\r\nContent-Length: {length}\r\n\r\n{contents}` adalah inti dari format respons HTTP yang dikirim ke browser. `status_line` berisi "HTTP/1.1 200 OK", menandakan bahwa permintaan telah berhasil diproses. Lalu, `Content-Length: {length}` memberi tahu browser seberapa panjang isi yang akan diterima dalam byte. Dua baris kosong \r\n\r\n adalah pemisah yang wajib dalam format HTTP, yang menandakan bahwa header telah selesai dan bagian selanjutnya adalah isi dari respons.Setelah semua elemen respons disusun, data ini dikirimkan ke browser menggunakan `stream.write_all`.
 </details>
+
+<details>
+    <summary><strong> Commit 3 Reflection Notes </summary></strong>
+
+Perubahan pada fungsi `handle_connection`:
+```rust
+fn handle_connection(mut stream: TcpStream) {
+    let buf_reader = BufReader::new(&stream);
+    let request_line = buf_reader.lines().next().unwrap().unwrap();
+
+    let (status_line, filename) = if request_line == "GET / HTTP/1.1" {
+        ("HTTP/1.1 200 OK", "hello.html")
+    } else {
+        ("HTTP/1.1 404 NOT FOUND", "404.html")
+    };
+
+    let contents = fs::read_to_string(filename).unwrap();
+    let length = contents.len();
+
+    let response =
+        format!("{status_line}\r\nContent-Length: {length}\r\n\r\n{contents}");
+
+    stream.write_all(response.as_bytes()).unwrap();
+}
+```
+
+Perubahan pada fungsi `handle_connection` di atas terletak pada pemisahan (split) antara bagian request dan response. Kita tidak lagi hanya membaca semua baris dari permintaan HTTP, tetapi cukup mengambil baris pertama saja (`request_line`) karena baris inilah yang menentukan jenis permintaan (misalnya `GET / HTTP/1.1`). Dengan memisahkan logika ini, kita bisa dengan mudah mengenali permintaan klien dan meresponsnya dengan file yang sesuai, seperti `hello.html` untuk permintaan ke /, atau `404.html` jika permintaan tidak valid.
+
+Saya juga menerapkan refactoring untuk menghilangkan duplikasi kode dan membuat struktur program lebih ringkas serta mudah dipelihara. Sebelumnya, blok `if` dan `else` memiliki isi yang hampir sama, hanya berbeda pada `status_line` dan `filename`. Dengan refactoring, perbedaan tersebut dipisahkan ke dalam satu pernyataan `let`, sementara proses membaca file, menghitung panjang konten, dan membentuk respons HTTP cukup dituliskan sekali di luar blok kondisi. Ini membuat kode lebih clean.
+
+Screen Capture ⤵️
+![Commit 3 screen capture](/assets/images/commit3.png)
+
+</details>
