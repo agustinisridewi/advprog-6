@@ -97,7 +97,7 @@ Screen Capture ⤵️
 
 Fungsi `handle_connection` pada milestone ini telah ditingkatkan agar tidak hanya membaca permintaan HTTP dari browser, tetapi juga memberikan respon HTML yang bisa ditampilkan di browser. Kita menambahkan `fs` ke dalam daftar use agar dapat mengakses modul sistem file dari Rust. Kemudian, file `hello.html` dibaca menggunakan `fs::read_to_string`, dan isi dari file tersebut disisipkan ke dalam respons HTTP melalui `format!`. 
 
-Agar sesuai dengan standar HTTP, kita juga menambahkan header Content-Length, yang berisi panjang isi HTML (length) sebagai informasi bagi browser tentang ukuran konten yang akan diterima.
+Saya juga menambahkan header Content-Length, yang berisi panjang isi HTML (length) sebagai informasi bagi browser tentang ukuran konten yang akan diterima agar sesuai dengan standar HTTP.
 
 Bagian `{status_line}\r\nContent-Length: {length}\r\n\r\n{contents}` adalah inti dari format respons HTTP yang dikirim ke browser. `status_line` berisi "HTTP/1.1 200 OK", menandakan bahwa permintaan telah berhasil diproses. Lalu, `Content-Length: {length}` memberi tahu browser seberapa panjang isi yang akan diterima dalam byte. Dua baris kosong \r\n\r\n adalah pemisah yang wajib dalam format HTTP, yang menandakan bahwa header telah selesai dan bagian selanjutnya adalah isi dari respons.Setelah semua elemen respons disusun, data ini dikirimkan ke browser menggunakan `stream.write_all`.
 </details>
@@ -166,3 +166,98 @@ fn handle_connection(mut stream: TcpStream) {
 ```
 Perubahan pada kode dengan menambahkan simulasi delay menggunakan `thread::sleep(Duration::from_secs(10))` pada request `/sleep` ini menunjukkan kelemahan server single-threaded, di mana satu permintaan lambat dapat memblokir semua permintaan lain karena hanya ada satu thread yang memproses semua koneksi. 
 </details>
+
+<details>
+    <summary><strong> Commit 5 Reflection Notes </summary></strong>
+
+Perubahan pada main.rs:
+```rust
+use tutorial6::ThreadPool;
+
+...
+
+fn main() {
+    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+    let pool = ThreadPool::new(4);
+
+    for stream in listener.incoming() {
+        let stream = stream.unwrap();
+
+        pool.execute(|| {
+            handle_connection(stream);
+        });
+    }
+}
+
+...
+```
+src/lib:
+```rust
+use std::{
+    sync::{mpsc, Arc, Mutex},
+    thread::{self, JoinHandle},
+};
+
+pub struct ThreadPool {
+    workers: Vec<Worker>,
+    sender: mpsc::Sender<Job>,
+}
+
+type Job = Box<dyn FnOnce() + Send + 'static>;
+
+impl ThreadPool {
+    pub fn new(size: usize) -> ThreadPool {
+        assert!(size > 0);
+
+        let (sender, receiver) = mpsc::channel();
+        let receiver = Arc::new(Mutex::new(receiver));
+
+        let mut workers = Vec::with_capacity(size);
+
+        for id in 0..size {
+            workers.push(Worker::new(id, Arc::clone(&receiver)));
+        }
+
+        ThreadPool { workers, sender }
+    }
+
+    pub fn execute<F>(&self, f: F)
+    where
+        F: FnOnce() + Send + 'static,
+    {
+        let job = Box::new(f);
+
+        self.sender.send(job).unwrap();
+    }
+}
+
+struct Worker {
+    id: usize,
+    thread: thread::JoinHandle<()>,
+}
+
+impl Worker {
+    fn new(id: usize, receiver: Arc<Mutex<mpsc::Receiver<Job>>>) -> Worker {
+        
+        let thread = thread::spawn(move || loop {
+            let job = receiver.lock().unwrap().recv().unwrap();
+            println!("Worker {id} got a job; executing.");
+            job();
+        });
+
+        Worker { id, thread }
+    }
+}
+```
+Commit sebelumnya telah membuktikan single-thread akan menyebabkan masalah jika terjadi banjir permintaan ke server. Maka dari itu, pada langkah ini saya menerapkan multithreading.
+
+Dengan `ThreadPool` yang menyimpan sejumlah `Worker`, yaitu thread-thread yang berjalan secara paralel. Masing-masing Worker akan terus mendengarkan saluran kerja (job queue) yang dikirimkan melalui `mpsc::channel`. Channel tersebut dibungkus oleh `Arc<Mutex<Receiver>>` agar bisa dibagikan dan diakses aman oleh banyak thread sekaligus. Ketika server menerima koneksi baru melalui `listener.incoming()`, method `pool.execute()` akan digunakan untuk mengirimkan closure yang berisi logika penanganan koneksi ke channel, dan salah satu Worker akan mengeksekusinya.
+
+Desain ini secara teknis jauh lebih efisien dibanding membuat thread baru setiap kali ada koneksi masuk. Dengan `ThreadPool`, kita hanya perlu membuat sejumlah thread tetap di awal, dan pekerjaan (job) dikirim ke thread-thread tersebut sesuai giliran. Ini menghindari overhead pembuatan dan penghancuran thread terus-menerus.
+</details>
+
+<details>
+    <summary><strong> Bonus </summary></strong>
+    
+</details>
+
